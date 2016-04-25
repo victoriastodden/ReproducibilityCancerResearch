@@ -1,0 +1,87 @@
+#Simulation of Golub paper
+
+
+#load data from website
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("golubEsets")
+library(golubEsets)
+data("Golub_Train")
+golub=Golub_Train
+golub.expression = exprs(golub)
+dim(golub.expression)
+
+
+#transform the matrix, let sample be in rows and gene be in columns
+golub.expression.trans = t(golub.expression)
+dim(golub.expression.trans)
+golub.pheno=pData(golub)
+attach(golub.pheno)
+leuk.type = (ALL.AML == "AML")
+table(leuk.type)
+
+all.aml.expression = as.matrix(cbind(leuk.type, golub.expression.trans))
+dim(all.aml.expression)
+train=data.frame(all.aml.expression)
+
+
+#Use gini index select important genes
+library(randomForest)
+rfModel= randomForest(y=train$leuk.type, x=train[,2:7130],mtry = 84, ntree=10000,do.trace=T)
+
+sortedImp_gini = sort(rfModel$importance[,1], decreasing=T);
+sortedImpt_scaled = sort(importance(rfModel, scale = T)[,1], decreasing = T )
+
+ImpGene=names(sortedImp_gini)[1:1038]
+train_Imp=train[,c(colnames(train)%in%ImpGene)]
+train_Imp=cbind(leuk.type,train_Imp)
+train_Imp$leuk.type=as.factor((train_Imp$leuk.type))
+##prepare for test dataset
+data("Golub_Test")
+test.golub=Golub_Test
+test.golub.expression = exprs(test.golub)
+dim(test.golub.expression)
+
+
+#transform the matrix, let sample be in rows and gene be in columns
+test.golub.expression.trans = t(test.golub.expression)
+dim(test.golub.expression.trans)
+test.golub.pheno=pData(test.golub)
+attach(test.golub.pheno)
+leuk.type = (ALL.AML == "AML")
+table(leuk.type)
+
+test.all.aml.expression = as.matrix(cbind(leuk.type, test.golub.expression.trans))
+dim(test.all.aml.expression)
+test=data.frame(test.all.aml.expression)
+
+test_Imp=test[,c(colnames(test)%in%ImpGene)]
+test_Imp=cbind(leuk.type,test_Imp)
+test_Imp$leuk.type=as.factor(test_Imp$leuk.type)         
+####Implement three tree model
+#install.packages("RWeka")
+#library(RWeka)
+DT=J48(as.factor(leuk.type)~., data = train_Imp)
+DT_pred=predict(DT, newdata = test_Imp)
+table(test_Imp$leuk.type, DT_pred)
+# BT_pred
+# FALSE TRUE
+# FALSE    18    2
+# TRUE      1   13
+
+##Bagging
+BG=Bagging(leuk.type~., data = train_Imp, control = Weka_control(W = "DecisionStump"))
+BG_pred=predict(BG, newdata = test_Imp)
+table(test_Imp$leuk.type, BG_pred)
+# BG_pred
+# FALSE TRUE
+# FALSE    20    0
+# TRUE      5    9
+##Boosting
+BT=AdaBoostM1(leuk.type ~ ., data = train_Imp,
+                 control = Weka_control(W = "DecisionStump"))
+BT_pred=predict(BT, newdata = test_Imp)
+table(test_Imp$leuk.type, BT_pred)
+BT_pred
+# FALSE TRUE
+# FALSE    18    2
+# TRUE      1   13
