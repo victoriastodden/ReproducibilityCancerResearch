@@ -1,2 +1,3 @@
 This folder includes R code in first phase.
 The R code are used for implementing different classifier in literature. And gave the type I and type II error rate.
+The code for penalized logistic regression is from R library GeneLogit at http://geocities.com/jg_liao.
