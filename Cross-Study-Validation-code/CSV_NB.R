@@ -1,0 +1,115 @@
+#naive bayes
+#selection without kmeans
+setwd("/Users/tangzhaoying/Desktop/data/wk11")
+
+# Train on Golub data -----------------------------------------------------
+load('golub.rdata')
+golub=data.frame(golub)
+
+#calculate mean,std of columns for different genes for the sample in class 1 and class2, respectively.
+aml.mean.expression=colMeans(golub[golub$type == 1,], na.rm="TRUE")
+aml.std.expression=apply(golub[golub$type == 1,], 2, sd)
+
+all.mean.expression=colMeans(golub[golub$type == 0,], na.rm="TRUE")
+all.std.expression=apply(golub[golub$type == 0,], 2, sd)
+
+#calculate P use (mu1-mu2)/(sigma1+sigma2)
+P=NULL
+for (i in 2:length(all.mean.expression)){
+  p=abs((aml.mean.expression[i]-all.mean.expression[i])/(aml.std.expression[i]+all.std.expression[i]))
+  P=c(P,p)
+}
+
+#use 90 genes
+gene_90=data.frame(golub[,c(1,head(order(P,decreasing = T),90)+1)])
+
+#Parametric NaiveBayes (use package)
+library(e1071)
+NBfit.para=naiveBayes(as.factor(gene_90$type)~.,data = gene_90)
+names(NBfit.para)
+NBfit.para$apriori
+NBfit.para$levels
+
+#test on GSE10899 data
+load("GSE10899.Rdata")
+gse99.aml.mean=colMeans(GSE10899[GSE10899$type == 1,], na.rm="TRUE")
+gse99.aml.sd=apply(GSE10899[GSE10899$type == 1,], 2, sd)
+
+gse99.all.mean=colMeans(GSE10899[GSE10899$type == 0,], na.rm="TRUE")
+gse99.all.sd=apply(GSE10899[GSE10899$type == 0,], 2, sd)
+
+#calculate P use (mu1-mu2)/(sigma1+sigma2)
+P=NULL
+for (i in 2:length(gse99.aml.mean)){
+  p=abs((gse99.aml.mean[i]-gse99.all.mean[i])/(gse99.aml.sd[i]+gse99.all.sd[i]))
+  P=c(P,p)
+}
+
+gse99_gene_90=data.frame(GSE10899[,c(1,head(order(P,decreasing = T),90)+1)])
+
+
+gse99.ytest.pred.NB.para=predict(NBfit.para,gse99_gene_90)
+
+#calculate auc score
+#install.packages('AUC')
+library(AUC)
+auc(roc(gse99.ytest.pred.NB.para,as.factor(GSE10899$type)))
+
+#Test on GSE14417
+load('GSE14417.RDATA')
+gse17.aml.mean=colMeans(GSE14417[GSE14417$type == 1,], na.rm="TRUE")
+gse17.aml.sd=apply(GSE14417[GSE14417$type == 1,], 2, sd)
+
+gse17.all.mean=colMeans(GSE14417[GSE14417$type == 0,], na.rm="TRUE")
+gse17.all.sd=apply(GSE14417[GSE14417$type == 0,], 2, sd)
+
+#calculate P use (mu1-mu2)/(sigma1+sigma2)
+P=NULL
+for (i in 2:length(gse17.aml.mean)){
+  p=abs((gse17.aml.mean[i]-gse17.all.mean[i])/(gse17.aml.sd[i]+gse17.all.sd[i]))
+  P=c(P,p)
+}
+
+gse17_gene_90=data.frame(GSE14417[,c(1,head(order(P,decreasing = T),90)+1)])
+
+#predict 
+gse17.ytest.pred.NB.para=predict(NBfit.para,gse17_gene_90)
+
+#calculate auc score
+#library(AUC)
+auc(roc(gse17.ytest.pred.NB.para,as.factor(GSE14417$type)))
+
+
+#Test on GSE14479
+load('GSE14479.RDATA')
+gse79.aml.mean=colMeans(GSE14479[GSE14479$type == 1,], na.rm="TRUE")
+gse79.aml.sd=apply(GSE14479[GSE14479$type == 1,], 2, sd)
+
+gse79.all.mean=colMeans(GSE14479[GSE14479$type == 0,], na.rm="TRUE")
+gse79.all.sd=apply(GSE14479[GSE14479$type == 0,], 2, sd)
+
+gse79_gene_90=data.frame(GSE14479[,c(1,head(order(P,decreasing = T),90)+1)])
+
+#predict 
+gse79.ytest.pred.NB.para=predict(NBfit.para,gse79_gene_90)
+
+#calculate auc score
+#library(AUC)
+auc(roc(gse79.ytest.pred.NB.para,as.factor(GSE14479$type)))
+
+
+
+#test on JUDE
+load('jude.rdata')
+
+jude.aml.mean=colMeans(jude[GSE14479$type == 1,], na.rm="TRUE")
+jude.aml.sd=apply(jude[jude$type == 1,], 2, sd)
+
+jude.all.mean=colMeans(jude[jude$type == 0,], na.rm="TRUE")
+jude.all.sd=apply(jude[jude$type == 0,], 2, sd)
+
+jude_gene_90=data.frame(jude[,c(1,head(order(P,decreasing = T),90)+1)])
+
+jude.ytest.pred.NB.para=predict(NBfit.para,jude_gene_90)
+
+auc(roc(jude.ytest.pred.NB.para,as.factor(jude$type)))
