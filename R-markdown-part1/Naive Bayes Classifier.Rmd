@@ -1,0 +1,183 @@
+---
+title: "Naive Bayes Classifier"
+author: "Zhaoying Tang"
+date: "May 1, 2016"
+output: html_document
+---
+
+This is an R Markdown document. This file contains R code for Naive Bayes Classifier.
+
+load data from website
+source("http://bioconductor.org/biocLite.R")
+biocLite("golubEsets")
+```{r,eval=FALSE}
+library(golubEsets)
+data("Golub_Train")
+golub=Golub_Train
+golub.expression = exprs(golub)
+dim(golub.expression)
+```
+
+transform the matrix, let sample be in rows and gene be in columns
+```{r,eval=FALSE}
+golub.expression.trans = t(golub.expression)
+dim(golub.expression.trans)
+```
+
+add AML,ALL 0,1 into dataset
+```{r,eval=FALSE}
+golub.pheno=pData(golub)
+attach(golub.pheno)
+leuk.type = (ALL.AML == "AML")
+table(leuk.type)
+
+all.aml.expression = as.matrix(cbind(leuk.type, golub.expression.trans))
+dim(all.aml.expression)
+```
+
+Test data
+```{r,eval=FALSE}
+data("Golub_Test")
+test.golub=Golub_Test
+test.golub.expression = exprs(test.golub)
+dim(test.golub.expression)
+```
+
+
+transform the matrix, let sample be in rows and gene be in columns
+```{r,eval=FALSE}
+test.golub.expression.trans = t(test.golub.expression)
+```
+
+
+add AML,ALL 0,1 into dataset
+```{r,eval=FALSE}
+test.golub.pheno=pData(test.golub)
+attach(test.golub.pheno)
+test.leuk.type = (ALL.AML == "AML")
+table(test.leuk.type)
+
+test.all.aml.expression = as.matrix(cbind(test.leuk.type, test.golub.expression.trans))
+dim(test.all.aml.expression)
+
+all.aml.expression=data.frame(all.aml.expression)
+test.all.aml.expression=data.frame(test.all.aml.expression)
+```
+
+
+First method, without k-means
+calculate mean,std of columns for different genes for the sample in class 1 and class2, respectively.
+```{r,eval=FALSE}
+aml.mean.expression=colMeans(all.aml.expression[leuk.type == 1,], na.rm="TRUE")
+aml.std.expression=apply(all.aml.expression[leuk.type == 1,], 2, sd)
+
+all.mean.expression=colMeans(all.aml.expression[leuk.type == 0,], na.rm="TRUE")
+all.std.expression=apply(all.aml.expression[leuk.type == 0,], 2, sd)
+```
+
+
+calculate P use (mu1-mu2)/(sigma1+sigma2)
+```{r,eval=FALSE}
+P=NULL
+for (i in 2:length(all.mean.expression)){
+  p=abs((aml.mean.expression[i]-all.mean.expression[i])/(aml.std.expression[i]+all.std.expression[i]))
+  P=c(P,p)
+}
+```
+
+
+
+5 gene train model
+```{r,eval=FALSE}
+gene_5=data.frame(all.aml.expression[,c(1,head(order(P,decreasing = T),5)+1)])
+test.gene_5=data.frame(test.all.aml.expression[,c(1,head(order(P,decreasing = T),5)+1)])
+library(e1071)
+
+
+NBfit.para=naiveBayes(as.factor(gene_5$leuk.type)~.,data = gene_5)
+names(NBfit.para)
+NBfit.para$apriori
+NBfit.para$levels
+```
+
+5 gene Predict for test data
+```{r,eval=FALSE}
+ytest.pred.NB.para=predict(NBfit.para,test.gene_5)
+```
+
+
+
+30 samples were predicted correctly
+```{r,eval=FALSE}
+table(test.gene_5$test.leuk.type,ytest.pred.NB.para)
+```
+
+
+
+second, with k-means
+implement function for cluster SNR
+Change k to number of cluster each time
+```{r,eval=FALSE}
+k=10
+gene_cluster=kmeans(golub.expression,centers=k,iter.max = 100, nstart = 1,
+                      algorithm = c("Hartigan-Wong"))
+clust=data.frame(cbind(golub.expression,gene_cluster$cluster))
+
+newclust=vector("list",k)
+
+for (i in 1:k){
+  newclust[[i]]=clust[clust$V39==i,]
+  newclust[[i]]$V39=NULL
+  newclust[[i]]=data.frame(cbind(t( newclust[[i]]),leuk.type))
+}
+
+
+clust.aml.mean.expression=vector("list",k)
+clust.aml.std.expression=vector("list",k)
+clust.all.mean.expression=vector("list",k)
+clust.all.std.expression=vector("list",k)
+
+for (i in 1:k){
+  clust.aml.mean.expression[[i]]=colMeans(newclust[[i]][leuk.type == 1,], na.rm="TRUE")
+  clust.aml.std.expression[[i]]=apply(newclust[[i]][leuk.type == 1,], 2, sd)
+  clust.all.mean.expression[[i]]=colMeans(newclust[[i]][leuk.type == 0,], na.rm="TRUE")
+  clust.all.std.expression[[i]]=apply(newclust[[i]][leuk.type == 0,], 2, sd)
+}
+
+P=vector("list",k)
+for (j in 1:k){
+  for (i in 1:length(clust.all.mean.expression[[j]])-1){
+    p=abs((clust.aml.mean.expression[[j]][i]-clust.all.mean.expression[[j]][i])/(clust.aml.std.expression[[j]][i]+clust.all.std.expression[[j]][i]))
+    P[[j]]=c(P[[j]],p)
+  }
+}
+
+Gene=vector("list",k)
+Gene_name=NULL
+for (i in 1:k){
+  Gene[[i]]=colnames(newclust[[i]])[head(order(P[[i]],decreasing = T),1)]
+  Gene_name=c(Gene_name,Gene[[i]])
+}
+```
+
+
+5 gene， you can also try 10, 20, 30
+```{r,eval=FALSE}
+Gene_5=cbind(leuk.type,all.aml.expression[,colnames(all.aml.expression)%in%Gene_name])
+test.Gene_5=cbind(test.leuk.type,test.all.aml.expression[,colnames(test.all.aml.expression)%in%Gene_name])
+NBfit.para=naiveBayes(as.factor(Gene_5$leuk.type)~.,data = Gene_5)
+```
+
+
+Predict for test data
+```{r,eval=FALSE}
+ytest.pred.NB.para=predict(NBfit.para,test.Gene_5)
+```
+
+test error
+```{r,eval=FALSE}
+table(test.Gene_5$test.leuk.type,ytest.pred.NB.para)
+```
+
+
+
